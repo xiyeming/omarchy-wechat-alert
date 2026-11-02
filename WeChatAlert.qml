@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
+import Quickshell.Wayland
 import Quickshell.Services.SystemTray
 import qs.Commons
 import qs.Ui
@@ -47,14 +47,11 @@ BarWidget {
     return null
   }
 
-  // Class of the currently focused window: a focused WeChat window counts as
-  // "seen", clearing the blink.
-  readonly property string focusedClass: {
-    var t = Hyprland.activeToplevel
-    if (!t) return ""
-    var o = t.lastIpcObject || {}
-    return String(o.class || o.initialClass || "")
-  }
+  // app_id of the currently focused toplevel (Wayland foreign-toplevel
+  // protocol — same source the omarchy ActiveWindow widget uses): a focused
+  // WeChat window counts as "seen", clearing the blink.
+  readonly property var activeToplevel: ToplevelManager.activeToplevel
+  readonly property string focusedClass: activeToplevel ? String(activeToplevel.appId || "") : ""
 
   onFocusedClassChanged: clearIfWechatFocused()
   Component.onCompleted: clearIfWechatFocused()
