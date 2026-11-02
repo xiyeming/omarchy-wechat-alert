@@ -1,5 +1,7 @@
 # WeChat/QQ Alert for Omarchy
 
+English | [简体中文](README.zh-CN.md)
+
 A bar widget for [Omarchy](https://omarchy.org)'s shell that **blinks the
 app's own tray icon in place** when a WeChat or QQ notification arrives —
 the Windows-taskbar-style "new message" cue that WeChat and QQ for Linux are
@@ -33,7 +35,7 @@ created.
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/<you>/omarchy-wechat-alert.git --enable
+omarchy plugin add https://github.com/xiyeming/omarchy-wechat-alert.git --enable
 ```
 
 Manual install: copy this folder to
