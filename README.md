@@ -1,30 +1,33 @@
-# WeChat Alert for Omarchy
+# WeChat/QQ Alert for Omarchy
 
-A bar widget for [Omarchy](https://omarchy.org)'s shell that **blinks when a
-WeChat notification arrives** — the Windows-style "new message" cue that
-WeChat for Linux is missing.
+A bar widget for [Omarchy](https://omarchy.org)'s shell that **blinks the
+app's own tray icon in place** when a WeChat or QQ notification arrives —
+the Windows-taskbar-style "new message" cue that WeChat and QQ for Linux are
+missing. No extra icon is added.
 
 ![blink bright vs dim](docs/blink-bright.png)
 
-When a message arrives, a WeChat icon (with a red dot badge) fades in and out
-next to your tray until you open WeChat.
+When a message arrives, the app's tray icon fades in and out (with a red-dot
+badge) until you open the app.
 
 ## Why this exists
 
 On Windows, WeChat flashes its taskbar entry via the Win32 `FlashWindowEx`
-API. The Linux port has no equivalent: it never sets the StatusNotifierItem
-`Status` to `NeedsAttention`, never provides `AttentionIcon`/`OverlayIcon`,
-and emits no tray signals at all when a message arrives (verified with
+API. The Linux ports have no equivalent: they never set the StatusNotifierItem
+`Status` to `NeedsAttention`, never provide `AttentionIcon`/`OverlayIcon`, and
+emit no tray signals at all when a message arrives (verified with
 `dbus-monitor`). The Omarchy tray renders icons statically, so nothing on
 screen ever draws attention to the new message beyond the toast.
 
-This widget closes the gap by listening for WeChat's notifications on the
-session bus instead, and blinking in the bar.
+This widget closes the gap by listening for notifications on the session bus,
+then blinking the **original tray icon in place** — the tray's own item is
+found inside the shared QML scene and animated directly, so no second icon is
+created.
 
 ## Requirements
 
 - Omarchy with `omarchy-shell` (the Quickshell bar)
-- WeChat for Linux (`/opt/wechat`) — the native client
+- WeChat and/or QQ for Linux
 - `dbus-monitor` (ships with `dbus`, already on every Omarchy install)
 
 ## Install
@@ -32,9 +35,6 @@ session bus instead, and blinking in the bar.
 ```bash
 omarchy plugin add https://github.com/<you>/omarchy-wechat-alert.git --enable
 ```
-
-The widget lands in the right bar section (next to the tray) and appears
-whenever a WeChat notification is pending.
 
 Manual install: copy this folder to
 `~/.config/omarchy/plugins/xiyeming.wechat-alert/`, run
@@ -45,24 +45,29 @@ Manual install: copy this folder to
 
 | Event | Behavior |
 |---|---|
-| WeChat notification arrives | icon starts blinking (≈1.2 s cycle) with a red dot badge |
-| Left click on the icon | opens WeChat (tray `Activate`), blink stops |
-| WeChat main window gains focus | blink clears automatically |
-| WeChat not running | nerd-font WeChat glyph is shown instead; click launches WeChat |
+| matched notification arrives | that app's tray icon blinks (≈1.2 s cycle) with a red-dot badge |
+| the app's window gains focus | its blink clears automatically |
+| click on the tray icon | opens the app (normal tray behavior); focus clears the blink |
+| app not running | nothing to blink yet; starts once the tray icon appears |
 
-The icon reuses WeChat's actual tray icon, so it matches the real app.
+Blinks are per-app: a QQ message does not clear a pending WeChat blink and
+vice versa.
 
 ## Settings
 
-Override the matched notification `app_name` in `~/.config/omarchy/shell.json`
-(useful if a WeChat build changes its sender name, or to match another app):
+Override the matched apps in `~/.config/omarchy/shell.json`:
 
 ```json
 {
   "id": "xiyeming.wechat-alert",
-  "appName": "WeChat"
+  "appNames": ["WeChat", "QQ"],
+  "trayIds": { "QQ": "chrome_status_icon_1" }
 }
 ```
+
+- `appNames` — matched against both the notification `app_name` and tray item
+  metadata (case-insensitive).
+- `trayIds` — optional per-app tray item Id override.
 
 ## How it works
 
@@ -70,13 +75,22 @@ Override the matched notification `app_name` in `~/.config/omarchy/shell.json`
   `org.freedesktop.Notifications.Notify` calls and matches the `app_name`
   argument. The notification daemon remains the sole consumer — notifications
   themselves are untouched.
+- The widget walks the shell's QML scene to find the tray widget's
+  `TrayItem` delegate for each app, runs a Windows-taskbar-style opacity
+  blink on it, and pins a red-dot badge as its child.
 - One listener process per monitor; it restarts automatically after 2 s if it
-  ever dies.
+  ever dies. A 2 s sweep re-attaches icons after app restarts or tray
+  rebuilds.
 - Notes / limitations:
   - Do Not Disturb does **not** suppress the blink (the watcher sees raw bus
     calls before DND filtering).
-  - The tray-icon path depends on WeChat running (for the icon); the glyph
-    fallback covers the rest.
+  - QQ's tray item is an anonymous chromium icon (`chrome_status_icon_1` with
+    empty Title/ToolTip, a pattern shared by other Electron apps). The widget
+    falls back to "the anonymous chromium item" for apps without metadata
+    matches; if that guess is wrong on your setup, pin the right Id via
+    `trayIds`.
+  - Tray icons blink but tray items themselves are untouched otherwise — the
+    plugin animates `opacity` and restores it on clear.
 
 ## Uninstall
 

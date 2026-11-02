@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "id": "xiyeming.wechat-alert",
-  "name": "WeChat Alert",
-  "version": "1.0.0",
+  "name": "WeChat/QQ Alert",
+  "version": "1.1.0",
   "author": "xiyeming",
-  "description": "Blinking bar alert when a WeChat notification arrives; click to open WeChat",
+  "description": "Blinks the original tray icon when a WeChat/QQ notification arrives; clears on focus",
   "kinds": [
     "bar-widget"
   ],
@@ -12,8 +12,8 @@
     "barWidget": "WeChatAlert.qml"
   },
   "barWidget": {
-    "displayName": "WeChat Alert",
-    "description": "Blinks a WeChat icon in the bar when a WeChat notification arrives (WeChat for Linux never signals tray attention, so this watches notifications instead)",
+    "displayName": "WeChat/QQ Alert",
+    "description": "Blinks the app's own tray icon (Windows-taskbar style) when a notification arrives — WeChat/QQ for Linux never signal tray attention",
     "category": "Messaging",
     "allowMultiple": false,
     "defaultSection": "right"
