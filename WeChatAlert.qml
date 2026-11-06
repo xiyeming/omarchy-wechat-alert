@@ -309,12 +309,16 @@ BarWidget {
   }
 
   function detach(app) {
-    if (app.anim) { app.anim.destroy(); app.anim = null }
-    if (app.badge) { app.badge.destroy(); app.badge = null }
-    if (app.item) {
-      try { app.item.opacity = 1 } catch (e) {}
-      app.item = null
-    }
+    // Each cleanup step is exception-safe: the delegate may already be
+    // destroyed (Repeater rebuilds when ANY tray item comes or goes), and
+    // its children (anim, badge) die with it. An exception here must not
+    // abort the state reset, or the app can never re-attach.
+    try { if (app.anim) app.anim.destroy() } catch (e) {}
+    try { if (app.badge) app.badge.destroy() } catch (e) {}
+    try { if (app.item) app.item.opacity = 1 } catch (e) {}
+    app.anim = null
+    app.badge = null
+    app.item = null
   }
 
   function detachAll() {
