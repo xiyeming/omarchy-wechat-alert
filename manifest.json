@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "xiyeming.wechat-alert",
   "name": "WeChat/QQ Alert",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "xiyeming",
-  "description": "Blinks the original tray icon when a WeChat/QQ notification arrives; clears on focus",
+  "description": "Blinks the original tray icon in place when a WeChat/QQ notification arrives; falls back to a standalone alert icon; clears on focus",
   "kinds": [
     "bar-widget"
   ],
@@ -13,7 +13,7 @@
   },
   "barWidget": {
     "displayName": "WeChat/QQ Alert",
-    "description": "Blinks the app's own tray icon (Windows-taskbar style) when a notification arrives — WeChat/QQ for Linux never signal tray attention",
+    "description": "Blinks the app's own tray icon in place (Windows-taskbar style) when a notification arrives, with a standalone-icon fallback — WeChat/QQ for Linux never signal tray attention",
     "category": "Messaging",
     "allowMultiple": false,
     "defaultSection": "right"

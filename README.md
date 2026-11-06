@@ -2,16 +2,16 @@
 
 English | [简体中文](README.zh-CN.md)
 
-A bar widget for [Omarchy](https://omarchy.org)'s shell that **blinks an
-alert icon** when a WeChat or QQ notification arrives — the
+A bar widget for [Omarchy](https://omarchy.org)'s shell that **blinks the
+original WeChat/QQ tray icon in place** when a notification arrives — the
 Windows-taskbar-style "new message" cue that WeChat and QQ for Linux are
-missing. The alert shows the app's **own tray icon**, fetched from the
-system tray service, and disappears once the message is seen.
+missing. No extra icon is added to the bar; the app's own tray icon fades
+in and out with a red-dot badge until the message is seen. If the tray
+delegates ever become unreachable (a future shell change), the widget
+degrades to showing a standalone alert icon instead of silently doing
+nothing.
 
 ![blink bright vs dim](docs/blink-bright.png)
-
-When a message arrives, the widget's bar slot shows that app's tray icon
-fading in and out (with a red-dot badge) until you open the app.
 
 ## Why this exists
 
@@ -23,15 +23,16 @@ emit no tray signals at all when a message arrives (verified with
 screen ever draws attention to the new message beyond the toast.
 
 This widget closes the gap by listening for notifications on the session bus,
-then showing the app's own tray icon (resolved from the tray service) in
-the widget's bar slot, next to the tray, with a Windows-taskbar-style
-blink on top.
+finding the app's TrayItem delegate in the shell's QML scene, and running the
+blink directly on it.
 
-> **v1.2 change:** earlier versions blinked the tray widget's existing icon
-> in place by walking the shell's QML scene. Newer omarchy shells no longer
-> expose those tray delegates in the plugin's scene tree, so v1.2 renders
-> its own icon instead. While alerting, the widget visibly occupies its bar
-> slot — that extra icon next to the tray is this widget working as designed.
+> **v1.3 change:** v1.1 already blinked the tray icon in place by walking
+> the shell's QML scene. After an omarchy update appeared to break that
+> (scene walk found 0 items), v1.2 replaced it with a self-rendered
+> standalone alert icon. Re-verified on the current omarchy shell: the tray
+> delegates are back in the plugin's scene tree (walk finds every TrayItem),
+> so v1.3 restores in-place blinking and keeps the v1.2 self-rendered icon
+> purely as a fallback when no delegate is found.
 
 ## Requirements
 
@@ -50,14 +51,18 @@ Manual install: copy this folder to
 `omarchy-shell shell rescanPlugins`, then
 `omarchy plugin enable xiyeming.wechat-alert --section right`.
 
+The widget renders nothing in its own slot in primary mode, so its position
+in the layout does not matter.
+
 ## Usage
 
 | Event | Behavior |
 |---|---|
-| matched notification arrives | the widget's bar slot shows that app's tray icon, blinking (≈1.2 s cycle) with a red-dot badge |
-| the app's window gains focus | the alert clears automatically and the slot collapses |
-| click on the alert icon | activates the app (same as clicking its tray icon); focus clears the alert |
-| app not running / no tray item | nothing to show yet; the alert appears once the tray item exists |
+| matched notification arrives | the app's own tray icon blinks in place (≈1.2 s cycle) with a red-dot badge |
+| the app's window gains focus | the blink clears automatically |
+| click on the tray icon | as usual — activates the app; focus clears the alert |
+| app not running / no tray item | nothing to blink yet; alerting starts once the tray item exists |
+| no tray delegate reachable (fallback) | the widget's own slot shows the app's icon, blinking, until focused |
 
 Alerts are per-app: a QQ message does not clear a pending WeChat alert and
 vice versa.
@@ -84,11 +89,17 @@ Override the matched apps in `~/.config/omarchy/shell.json`:
   `org.freedesktop.Notifications.Notify` calls and matches the `app_name`
   argument. The notification daemon remains the sole consumer — notifications
   themselves are untouched.
-- The widget resolves the app's tray item from
-  `SystemTray.items.values` (the StatusNotifierItem registry) and renders its
-  `icon` (already an `image://` URL) in its own bar slot, with an opacity
-  blink and a red-dot badge on top. Because it binds the tray model, the
-  alert picks the icon up automatically after app restarts or tray rebuilds.
+- **Primary mode:** the widget walks the shared QML scene, finds the tray's
+  TrayItem delegates (items whose `modelData` is a SystemTrayItem), matches
+  the target app by Id/Title/ToolTip, and attaches a Windows-taskbar-style
+  opacity blink plus a red-dot badge directly to that delegate. A periodic
+  sweep re-attaches after tray rebuilds or app restarts.
+- **Fallback mode:** if the scene walk finds no delegate (e.g. a future
+  shell change isolates the plugin tree), the widget renders the app's own
+  tray icon (resolved from `SystemTray.items.values`) in its bar slot with
+  the same blink and badge.
+- Window focus is tracked via the foreign-toplevel protocol (the same source
+  the omarchy ActiveWindow widget uses); focusing the app clears its alert.
 - One listener process per bar instance; it restarts automatically after 2 s
   if it ever dies.
 - Notes / limitations:
@@ -99,8 +110,8 @@ Override the matched apps in `~/.config/omarchy/shell.json`:
     falls back to "the anonymous chromium item" for apps without metadata
     matches; if that guess is wrong on your setup, pin the right Id via
     `trayIds`.
-  - The tray itself is never modified — the alert is a separate bar widget
-    that only mirrors the app's icon.
+  - The tray itself is never modified structurally — primary mode only
+    drives the delegate's `opacity` and pins a temporary badge child.
 
 ## Uninstall
 

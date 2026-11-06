@@ -1,20 +1,18 @@
-# WeChat/QQ Alert for Omarchy（微信/QQ 顶栏闪烁提醒）
+# WeChat/QQ Alert for Omarchy（微信/QQ 托盘原位闪烁提醒）
 
 [English](README.md) | 简体中文
 
-[Omarchy](https://omarchy.org) 顶栏插件：**收到微信 / QQ 消息时，在顶栏弹出该应用自己的托盘图标并闪烁提醒**——补上 Linux 版微信、QQ 缺失的 Windows 任务栏闪烁提醒。提醒图标取自系统托盘服务，消息处理完后自动消失。
+[Omarchy](https://omarchy.org) 顶栏插件：**收到微信 / QQ 消息时，直接在其托盘图标原位闪烁提醒**——补上 Linux 版微信、QQ 缺失的 Windows 任务栏闪烁提醒。顶栏不会多出任何图标；该应用自己的托盘图标以约 1.2 秒周期淡入淡出，右上角带红点角标，直到你打开该应用。若未来 shell 更新导致托盘组件不再可达，插件会自动降级为独立渲染提醒图标，而不是静默失效。
 
 ![闪烁亮/暗相位](docs/blink-bright.png)
-
-收到消息时，插件在顶栏自己的槽位显示该应用的托盘图标，以约 1.2 秒周期淡入淡出（右上角带红点角标），直到你打开该应用。
 
 ## 为什么需要这个插件
 
 Windows 上微信闪烁任务栏按钮靠的是 Win32 `FlashWindowEx` API。两个应用的 Linux 版都没有对应实现：它们从不把 StatusNotifierItem 的 `Status` 置为 `NeedsAttention`、不提供 `AttentionIcon`/`OverlayIcon`，来消息时托盘层零信号（已用 `dbus-monitor` 实测验证）。而 Omarchy 托盘只静态渲染图标——除了右上角弹出的通知 toast，屏幕上没有任何东西提醒你有新消息。
 
-本插件补上这个缺口：监听会话总线上的通知调用，然后在插件自己的顶栏槽位（紧挨托盘）显示该应用的托盘图标并叠加 Windows 任务栏式闪烁动画。
+本插件补上这个缺口：监听会话总线上的通知调用，在 shell 的 QML 场景中找到该应用的托盘图标项，直接在其上叠加闪烁动画。
 
-> **v1.2 变化：**早期版本通过遍历 shell 的 QML 场景树，直接原地闪烁托盘里已有的图标。新版 omarchy shell 不再把托盘图标项暴露在插件可见的场景树中（实测遍历结果为 0 项），所以 v1.2 改为自行渲染图标。提醒期间托盘旁边多出来的那个图标就是本插件在工作，属正常行为。
+> **v1.3 变化：**v1.1 早已实现托盘图标原地闪烁（遍历 shell QML 场景树），某次 omarchy 更新后似乎失效（遍历结果为 0 项），v1.2 改为自行渲染独立提醒图标。经在当前 omarchy shell 上重新实测：托盘 delegate 仍全部暴露在插件可见的场景树中（遍历能找到每一个 TrayItem），因此 v1.3 恢复原地闪烁，同时保留 v1.2 的独立图标渲染作为兜底——仅当找不到托盘 delegate 时使用。
 
 ## 环境要求
 
@@ -32,14 +30,17 @@ omarchy plugin add https://github.com/xiyeming/omarchy-wechat-alert.git --enable
 `omarchy-shell shell rescanPlugins`，然后
 `omarchy plugin enable xiyeming.wechat-alert --section right`。
 
+主模式下插件在自己的槽位不渲染任何内容，因此在布局中的位置不影响效果。
+
 ## 行为
 
 | 事件 | 行为 |
 |---|---|
-| 匹配应用收到通知 | 插件槽位显示该应用的托盘图标，开始闪烁（≈1.2 秒周期）+ 红点角标 |
-| 该应用的窗口获得焦点 | 提醒自动消失，槽位收起 |
-| 点击提醒图标 | 激活该应用（等同点击其托盘图标）；窗口聚焦后提醒清除 |
-| 应用未运行 / 无托盘项 | 暂无可显示内容；托盘项出现后自动生效 |
+| 匹配应用收到通知 | 该应用自己的托盘图标原位闪烁（≈1.2 秒周期）+ 红点角标 |
+| 该应用的窗口获得焦点 | 闪烁自动清除 |
+| 点击托盘图标 | 与平时一致——激活应用；窗口聚焦后提醒清除 |
+| 应用未运行 / 无托盘项 | 暂无可闪烁对象；托盘项出现后自动生效 |
+| 找不到托盘 delegate（兜底模式） | 插件槽位显示该应用图标并闪烁，直到窗口聚焦 |
 
 提醒按应用独立：QQ 来消息不会清除微信的待读提醒，反之亦然。
 
@@ -61,12 +62,14 @@ omarchy plugin add https://github.com/xiyeming/omarchy-wechat-alert.git --enable
 ## 工作原理
 
 - 一个旁听型 `dbus-monitor --session` 监视 `org.freedesktop.Notifications.Notify` 调用并匹配 `app_name` 参数。通知守护进程仍是唯一接收方——通知本身不受任何影响。
-- 插件从 `SystemTray.items.values`（StatusNotifierItem 注册表）解析出该应用的托盘项，在其自有顶栏槽位渲染其 `icon`（已是现成的 `image://` URL），叠加透明度闪烁动画和红点角标。由于绑定了托盘模型，应用重启或托盘重建后图标会自动恢复。
+- **主模式：**插件遍历共享 QML 场景树，找到托盘的 TrayItem delegate（`modelData` 为 SystemTrayItem 的项），按 Id/Title/ToolTip 匹配目标应用，直接在该 delegate 上挂载 Windows 任务栏式透明度闪烁动画和红点角标。周期性巡检会在托盘重建或应用重启后自动重新挂载。
+- **兜底模式：**若场景遍历找不到 delegate（例如未来 shell 变更隔离了插件树），插件改为从 `SystemTray.items.values` 解析该应用托盘项，在自己的槽位渲染其图标并叠加同样的闪烁与角标。
+- 窗口焦点通过 foreign-toplevel 协议跟踪（与 omarchy ActiveWindow 组件同源）；聚焦该应用即清除其提醒。
 - 每个顶栏实例一个监听进程；意外退出 2 秒后自动拉起。
 - 注意 / 限制：
   - 勿扰（DND）模式**不会**抑制闪烁（监听的是 DND 过滤之前的原始总线调用）。
   - QQ 的托盘项是匿名 chromium 图标（`chrome_status_icon_1`，Title/ToolTip 全空，与其它 Electron 应用同模式）。对元数据匹配不到的应用，回退为"匿名 chromium 项"启发式；若在你的机器上猜错，用 `trayIds` 指定正确 Id。
-  - 插件从不修改托盘本身——提醒只是独立渲染应用图标的顶栏组件。
+  - 插件从不改动托盘结构——主模式只驱动 delegate 的 `opacity` 并临时挂载角标子节点。
 
 ## 卸载
 
