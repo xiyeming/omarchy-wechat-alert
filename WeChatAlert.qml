@@ -193,31 +193,48 @@ BarWidget {
   // Tray attachment: walk the shared QML scene to find the tray's
   // TrayItem delegates (items whose modelData is a SystemTrayItem).
   // ---------------------------------------------------------------
+  // Matching delegate selection: among ALL scene matches, prefer the LAST
+  // effectively-visible one. Rationale: scene DFS order puts the drawer's
+  // TrayItems before the pinned row, and clipped/invisible delegates (an
+  // unpinned app's drawer slot, a closed popup's rows) must never host the
+  // alert — blinking those shows nothing. The pinned row's visible icon is
+  // always reached last for pinned apps.
   function findTrayItem(app) {
     var override = trayIdOverrides[app.name]
     var collected = []
     collectTrayItems(sceneRoot(root), collected)
     var anonymous = null
 
-    for (var i = 0; i < collected.length; i++) {
+    for (var i = collected.length - 1; i >= 0; i--) {
       var md = collected[i].modelData
       var id = String(md.id || "").toLowerCase()
       var title = String(md.title || "").toLowerCase()
       var tt = String(md.tooltipTitle || "").toLowerCase()
       var td = String(md.tooltipDescription || "").toLowerCase()
 
-      if (override !== undefined && id === String(override).toLowerCase()) return collected[i]
-      if (id === app.key || title === app.key || tt === app.key) return collected[i]
-      if (id.indexOf(app.key) !== -1 || title.indexOf(app.key) !== -1
-          || tt.indexOf(app.key) !== -1 || td.indexOf(app.key) !== -1) return collected[i]
-
-      // Anonymous chromium icon heuristic: Id=chrome_status_icon_1 with all
-      // metadata empty (QQ NT matches; chromium items carrying a tooltip are
-      // excluded).
-      if (anonymous === null && id === "chrome_status_icon_1"
-          && title === "" && tt === "" && td === "") anonymous = collected[i]
+      var isAnon = (id === "chrome_status_icon_1" && title === "" && tt === "" && td === "")
+      var keyMatch = (id === app.key || title === app.key || tt === app.key
+          || id.indexOf(app.key) !== -1 || title.indexOf(app.key) !== -1
+          || tt.indexOf(app.key) !== -1 || td.indexOf(app.key) !== -1)
+      if (!keyMatch && !isAnon) continue
+      if (override !== undefined && id !== String(override).toLowerCase() && !keyMatch) continue
+      if (!effectivelyVisible(collected[i])) continue
+      if (isAnon && anonymous === null) anonymous = collected[i]
+      else if (keyMatch) return collected[i]
     }
     return anonymous
+  }
+
+  // A delegate is no use if it or any ancestor is invisible or squeezed away
+  // by a zero-size clip (closed drawer, dismissed popup).
+  function effectivelyVisible(item) {
+    var p = item
+    while (p) {
+      if (p.visible === false) return false
+      if (p.clip === true && (p.width < 4 || p.height < 4)) return false
+      p = p.parent
+    }
+    return true
   }
 
   function sceneRoot(item) {
@@ -263,9 +280,8 @@ BarWidget {
   }
 
   function itemValid(item) {
-    try { void item.parent; return true } catch (e) { return false }
+    try { return item !== null && item !== undefined && item.toString() !== "null" } catch (e) { return false }
   }
-
   function scanTrayItems() {
     var fallback = null
     for (var i = 0; i < apps.length; i++) {
